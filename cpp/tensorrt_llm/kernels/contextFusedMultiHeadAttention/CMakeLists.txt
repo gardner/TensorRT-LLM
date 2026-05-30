@@ -23,7 +23,7 @@ add_library(context_attention_src OBJECT)
 
 filter_source_cuda_architectures(
   SOURCE_LIST SRC_CPP
-  ARCHS 80 86 89 90 100 120
+  ARCHS 80 86 89 90 100 120 121
   IMPLICIT_FAMILY)
 
 target_sources(context_attention_src PRIVATE ${SRC_CPP} ${SRC_CU})
@@ -42,10 +42,10 @@ tllm_add_cubin_archive_sources(
   context_attention_src "${CMAKE_CURRENT_SOURCE_DIR}/cubin"
   SYMBOL_PREFIX cubin_
   SYMBOL_SUFFIX _cu_cubin
-  ARCHS 80 86 89 90 100 120
+  ARCHS 80 86 89 90 100 120 121
   IMPLICIT_FAMILY)
 
-foreach(arch IN ITEMS 80 86 89 90 100 120)
+foreach(arch IN ITEMS 80 86 89 90 100 120 121)
   set(ARCH_ENABLED FALSE)
   set(TARGET_ARCH "")
   if(${arch} GREATER_EQUAL ${CMAKE_CUDA_MIN_ARCHITECTURE_HAS_FAMILY})

@@ -30,7 +30,7 @@ add_subdirectory(decoderXQAImplJIT/nvrtcWrapper)
 add_library(decoder_attention_src OBJECT)
 filter_source_cuda_architectures(
   SOURCE_LIST SRC_CPP
-  ARCHS 80 86 89 90 120
+  ARCHS 80 86 89 90 120 121
   IMPLICIT_FAMILY)
 
 set(basic_heads 32 64 128)
@@ -93,5 +93,5 @@ set_property(TARGET decoder_attention_src PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS
 include(tllm_cubin_archive)
 tllm_add_cubin_archive_sources(
   decoder_attention_src "${CMAKE_CURRENT_SOURCE_DIR}/cubin"
-  ARCHS 80 86 89 90 120
+  ARCHS 80 86 89 90 120 121
   IMPLICIT_FAMILY)

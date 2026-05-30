@@ -276,6 +276,7 @@ def generate_fmha_cu(project_dir, venv_python):
         "SCHEDULING_MODE": "1",
         "ENABLE_SM100": "1",
         "ENABLE_SM120": "1",
+        "ENABLE_SM121": "1",
         "GENERATE_CU_TRTLLM": "true"
     })
 

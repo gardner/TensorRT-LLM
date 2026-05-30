@@ -2,8 +2,6 @@
 name: Close inactive issues
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 3 * * *"
 
 jobs:
   stale:

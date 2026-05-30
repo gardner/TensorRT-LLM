@@ -29,6 +29,7 @@ sm2name = {
     89: 'ada',
     90: 'hopper',
     120: 'blackwell',
+    121: 'blackwell',
 }
 
 dtype2traits = {
@@ -231,6 +232,7 @@ GENCODES += $(GENCODE_SM89)
 GENCODES += $(GENCODE_SM90)
 GENCODES += $(GENCODE_SM100)
 GENCODES += $(GENCODE_SM120)
+GENCODES += $(GENCODE_SM121)
 
 OBJECTS_MHA  = obj/fused_multihead_attention.cpp.o
 OBJECTS_MHCA = obj/fused_multihead_cross_attention.cpp.o
@@ -6813,6 +6815,26 @@ def enumerate_kernels():
                                      head_sizes=[128, 192, 576],
                                      output_dtype="bf16")
 
+    if 'ENABLE_SM121' in os.environ:
+        # SM 121A
+        enumerate_hmma_flash_kernels(specs, sm=121, dtype='fp16')
+        enumerate_hmma_flash_kernels(specs, sm=121, dtype='bf16')
+        enumerate_hmma_flash_kernels(specs,
+                                     sm=121,
+                                     dtype='bf16',
+                                     head_size_v=128)
+        enumerate_hmma_flash_kernels(specs,
+                                     sm=121,
+                                     dtype='bf16',
+                                     head_size_v=512)
+        enumerate_qmma_kernels(specs, sm=121)
+        enumerate_qmma_flash_kernels(specs, sm=121, dtype='e4m3_fp32')
+        enumerate_qmma_flash_kernels(specs,
+                                     sm=121,
+                                     dtype='e4m3_fp32',
+                                     head_sizes=[128, 192, 576],
+                                     output_dtype="bf16")
+
     if 'ENABLE_HMMA_FP32' in os.environ:
         enumerate_hmma_flash_kernels(specs, sm=80, dtype='fp16_fp32')
         enumerate_hmma_flash_kernels(specs, sm=86, dtype='fp16_fp32')
@@ -6825,6 +6847,9 @@ def enumerate_kernels():
         if 'ENABLE_SM120' in os.environ:
             # SM 120
             enumerate_hmma_flash_kernels(specs, sm=120, dtype='fp16_fp32')
+        if 'ENABLE_SM121' in os.environ:
+            # SM 121A
+            enumerate_hmma_flash_kernels(specs, sm=121, dtype='fp16_fp32')
 
     for sm in [80, 86, 89, 90]:
         if not (sm == 90 and "GENERATE_CUBIN" in os.environ):
