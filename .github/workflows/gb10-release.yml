@@ -59,6 +59,9 @@ jobs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
       image_name: ${{ steps.meta.outputs.image_name }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
+      devel_image_ref: ${{ steps.meta.outputs.devel_image_ref }}
+      devel_cache_ref: ${{ steps.meta.outputs.devel_cache_ref }}
+      devel_buildcache_ref: ${{ steps.meta.outputs.devel_buildcache_ref }}
       trt_llm_ver: ${{ steps.meta.outputs.trt_llm_ver }}
       base_tag: ${{ steps.meta.outputs.base_tag }}
       triton_base_tag: ${{ steps.meta.outputs.triton_base_tag }}
@@ -97,6 +100,22 @@ jobs:
           image_ref="${image_name}:${image_tag}"
           trt_llm_ver="$(grep '^__version__' tensorrt_llm/version.py | grep -o '=.*' | tr -d '= "')"
           test -n "${trt_llm_ver}"
+          devel_hash="$(
+            {
+              printf 'base_tag=%s\n' "${INPUT_BASE_TAG}"
+              printf 'trt_llm_ver=%s\n' "${trt_llm_ver}"
+              git ls-files \
+                docker/Dockerfile.multi \
+                docker/common \
+                constraints.txt \
+                scripts/generate_container_oss_attribution.sh \
+                | sort \
+                | while read -r path; do sha256sum "${path}"; done
+            } | sha256sum | cut -c1-16
+          )"
+          devel_image_ref="${image_name}:devel-${image_tag}"
+          devel_cache_ref="${image_name}:devel-cache-${devel_hash}"
+          devel_buildcache_ref="${image_name}:devel-buildcache-${devel_hash}"
           push_image="true"
           publish_release="true"
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
@@ -108,6 +127,9 @@ jobs:
           echo "image_ref=${image_ref}" >> "${GITHUB_OUTPUT}"
           echo "image_name=${image_name}" >> "${GITHUB_OUTPUT}"
           echo "image_tag=${image_tag}" >> "${GITHUB_OUTPUT}"
+          echo "devel_image_ref=${devel_image_ref}" >> "${GITHUB_OUTPUT}"
+          echo "devel_cache_ref=${devel_cache_ref}" >> "${GITHUB_OUTPUT}"
+          echo "devel_buildcache_ref=${devel_buildcache_ref}" >> "${GITHUB_OUTPUT}"
           echo "trt_llm_ver=${trt_llm_ver}" >> "${GITHUB_OUTPUT}"
           echo "base_tag=${INPUT_BASE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "triton_base_tag=${INPUT_TRITON_BASE_TAG}" >> "${GITHUB_OUTPUT}"
@@ -133,12 +155,79 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
-        if: needs.setup.outputs.push_image == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+
+      - name: Check reusable devel base image
+        id: devel-cache
+        env:
+          DEVEL_CACHE_REF: ${{ needs.setup.outputs.devel_cache_ref }}
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "${DEVEL_CACHE_REF}" >/dev/null 2>&1; then
+            echo "hit=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "hit=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build and push devel base image
+        id: devel
+        if: steps.devel-cache.outputs.hit != 'true'
+        timeout-minutes: 180
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.multi
+          target: devel
+          platforms: linux/arm64
+          pull: true
+          push: true
+          tags: |
+            ${{ needs.setup.outputs.devel_image_ref }}
+            ${{ needs.setup.outputs.devel_cache_ref }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.setup.outputs.release_tag }}-devel
+          build-args: |
+            BASE_TAG=${{ needs.setup.outputs.base_tag }}
+            TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}
+            TRT_DOWNLOAD_MAX_SECONDS=1200
+          cache-from: |
+            type=registry,ref=${{ needs.setup.outputs.devel_buildcache_ref }}
+            type=gha,scope=gb10-trtllm-devel
+          cache-to: |
+            type=registry,ref=${{ needs.setup.outputs.devel_buildcache_ref }},mode=max
+            type=gha,mode=max,scope=gb10-trtllm-devel
+          provenance: false
+          sbom: false
+
+      - name: Promote reusable devel base image
+        if: steps.devel-cache.outputs.hit == 'true'
+        env:
+          DEVEL_CACHE_REF: ${{ needs.setup.outputs.devel_cache_ref }}
+          DEVEL_IMAGE_REF: ${{ needs.setup.outputs.devel_image_ref }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${DEVEL_IMAGE_REF}" \
+            "${DEVEL_CACHE_REF}"
+
+      - name: Resolve devel image digest
+        id: devel-meta
+        env:
+          DEVEL_IMAGE_REF: ${{ needs.setup.outputs.devel_image_ref }}
+        run: |
+          set -euo pipefail
+          digest="$(
+            docker buildx imagetools inspect "${DEVEL_IMAGE_REF}" \
+              | awk '/^Digest:/ {print $2; exit}'
+          )"
+          test -n "${digest}"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
 
       - name: Build wheel export
         timeout-minutes: 180
@@ -155,6 +244,7 @@ jobs:
             BASE_TAG=${{ needs.setup.outputs.base_tag }}
             TRITON_BASE_TAG=${{ needs.setup.outputs.triton_base_tag }}
             BUILD_WHEEL_ARGS=${{ env.BUILD_WHEEL_ARGS }}
+            DEVEL_IMAGE=${{ needs.setup.outputs.devel_image_ref }}
             TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}
             GIT_COMMIT=${{ github.sha }}
             TRT_DOWNLOAD_MAX_SECONDS=1200
@@ -183,6 +273,7 @@ jobs:
             BASE_TAG=${{ needs.setup.outputs.base_tag }}
             TRITON_BASE_TAG=${{ needs.setup.outputs.triton_base_tag }}
             BUILD_WHEEL_ARGS=${{ env.BUILD_WHEEL_ARGS }}
+            DEVEL_IMAGE=${{ needs.setup.outputs.devel_image_ref }}
             TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}
             GIT_COMMIT=${{ github.sha }}
             TRT_DOWNLOAD_MAX_SECONDS=1200
@@ -196,6 +287,9 @@ jobs:
           RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
           IMAGE_REF: ${{ needs.setup.outputs.image_ref }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          DEVEL_IMAGE_REF: ${{ needs.setup.outputs.devel_image_ref }}
+          DEVEL_IMAGE_DIGEST: ${{ steps.devel-meta.outputs.digest }}
+          DEVEL_CACHE_REF: ${{ needs.setup.outputs.devel_cache_ref }}
           TRT_LLM_VER: ${{ needs.setup.outputs.trt_llm_ver }}
           CUDA_ARCHS: ${{ needs.setup.outputs.cuda_archs }}
           BASE_TAG: ${{ needs.setup.outputs.base_tag }}
@@ -208,6 +302,8 @@ jobs:
           sha256sum dist/tensorrt_llm*.whl > dist/SHA256SUMS
           printf '%s\n' "${IMAGE_REF}" > dist/image-ref.txt
           printf '%s\n' "${IMAGE_DIGEST:-not-pushed}" > dist/image-digest.txt
+          printf '%s\n' "${DEVEL_IMAGE_REF}" > dist/devel-image-ref.txt
+          printf '%s\n' "${DEVEL_IMAGE_DIGEST}" > dist/devel-image-digest.txt
           python3 - <<'PY'
           import json
           import os
@@ -225,6 +321,9 @@ jobs:
               "image_ref": os.environ["IMAGE_REF"],
               "image_digest": os.environ.get("IMAGE_DIGEST") or "not-pushed",
               "image_pushed": os.environ["PUSH_IMAGE"] == "true",
+              "devel_image_ref": os.environ["DEVEL_IMAGE_REF"],
+              "devel_image_digest": os.environ["DEVEL_IMAGE_DIGEST"],
+              "devel_cache_ref": os.environ["DEVEL_CACHE_REF"],
               "trt_llm_version": os.environ["TRT_LLM_VER"],
               "cuda_architectures": os.environ["CUDA_ARCHS"],
               "base_tag": os.environ["BASE_TAG"],
@@ -243,10 +342,12 @@ jobs:
                       f"- CUDA architectures: `{metadata['cuda_architectures']}`",
                       f"- Image: `{metadata['image_ref']}`",
                       f"- Image digest: `{metadata['image_digest']}`",
+                      f"- Devel image: `{metadata['devel_image_ref']}`",
+                      f"- Devel image digest: `{metadata['devel_image_digest']}`",
                       f"- Workflow run: {metadata['run_url']}",
                       "",
                       "Artifacts attached to this release include the GB10 wheel,",
-                      "`SHA256SUMS`, `image-ref.txt`, `image-digest.txt`, and",
+                      "`SHA256SUMS`, image reference and digest files, and",
                       "`release-metadata.json`.",
                       "",
                   ]
@@ -263,6 +364,8 @@ jobs:
             dist/SHA256SUMS
             dist/image-ref.txt
             dist/image-digest.txt
+            dist/devel-image-ref.txt
+            dist/devel-image-digest.txt
             dist/release-metadata.json
             dist/release-notes.md
 

@@ -39,7 +39,7 @@ def test_gb10_release_passes_trt_llm_version_to_docker_builds():
     assert "trt_llm_ver: ${{ steps.meta.outputs.trt_llm_ver }}" in workflow
     assert 'trt_llm_ver="$(grep' in workflow
     assert 'echo "trt_llm_ver=${trt_llm_ver}"' in workflow
-    assert workflow.count("TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}") == 2
+    assert workflow.count("TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}") == 3
     assert dockerfile.count("ARG TRT_LLM_VER=dev") == 2
     assert (
         "--extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF"
@@ -59,7 +59,7 @@ def test_gb10_release_bounds_remote_downloads_and_build_steps():
     assert "cancel-in-progress: true" in workflow
     assert "timeout-minutes: 360" in workflow
     assert "timeout-minutes: 180" in workflow
-    assert workflow.count("TRT_DOWNLOAD_MAX_SECONDS=1200") == 2
+    assert workflow.count("TRT_DOWNLOAD_MAX_SECONDS=1200") == 3
     assert "ARG TRT_DOWNLOAD_MAX_SECONDS=1200" in dockerfile
     assert "TRT_DOWNLOAD_MAX_SECONDS=${TRT_DOWNLOAD_MAX_SECONDS}" in dockerfile
     assert "TRT_DOWNLOAD_MAX_SECONDS:-1200" in install_tensorrt
@@ -67,6 +67,35 @@ def test_gb10_release_bounds_remote_downloads_and_build_steps():
     assert "curl --fail --location" in install_tensorrt
     assert "--speed-limit 1048576" in install_tensorrt
     assert "--speed-time 180" in install_tensorrt
+
+
+def test_gb10_release_publishes_reusable_devel_base_image():
+    workflow = read(".github/workflows/gb10-release.yml")
+    dockerfile = read("docker/Dockerfile.multi")
+
+    assert "devel_image_ref: ${{ steps.meta.outputs.devel_image_ref }}" in workflow
+    assert "devel_cache_ref: ${{ steps.meta.outputs.devel_cache_ref }}" in workflow
+    assert "devel_buildcache_ref: ${{ steps.meta.outputs.devel_buildcache_ref }}" in workflow
+    assert 'devel_hash="$(' in workflow
+    assert 'devel_image_ref="${image_name}:devel-${image_tag}"' in workflow
+    assert 'devel_cache_ref="${image_name}:devel-cache-${devel_hash}"' in workflow
+    assert (
+        'devel_buildcache_ref="${image_name}:devel-buildcache-${devel_hash}"'
+        in workflow
+    )
+    assert "Check reusable devel base image" in workflow
+    assert "Build and push devel base image" in workflow
+    assert "target: devel" in workflow
+    assert "docker buildx imagetools create" in workflow
+    assert "Resolve devel image digest" in workflow
+    assert workflow.count("DEVEL_IMAGE=${{ needs.setup.outputs.devel_image_ref }}") == 2
+    assert "type=registry,ref=${{ needs.setup.outputs.devel_buildcache_ref }}" in workflow
+    assert "devel-image-ref.txt" in workflow
+    assert "devel-image-digest.txt" in workflow
+    assert "steps.devel-meta.outputs.digest" in workflow
+    assert "ARG DEVEL_IMAGE=devel" in dockerfile
+    assert "FROM ${DEVEL_IMAGE} AS wheel" in dockerfile
+    assert "FROM ${DEVEL_IMAGE} AS release" in dockerfile
 
 
 def test_cmake_and_docker_defaults_allow_native_sm121a():
