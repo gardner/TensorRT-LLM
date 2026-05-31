@@ -41,3 +41,45 @@ def test_upstream_bot_schedules_are_manual_only_for_the_fork():
     assert "schedule:" not in workflow_header(
         ".github/workflows/label_community_pr.yml"
     )
+
+
+def test_gb10_nvfp4_moe_loader_avoids_typed_storage_data_ptr():
+    quantization = read("tensorrt_llm/_torch/modules/fused_moe/quantization.py")
+
+    assert ".storage().data_ptr()" not in quantization
+    assert "dst_w3_w1_weight_scale.data_ptr()" in quantization
+    assert "dst_w3_w1_weight.data_ptr()" in quantization
+
+
+def test_gb10_fp8_prequant_and_nvfp4_linear_allow_sm121_cuda_core():
+    quantization_ops = read(
+        "tensorrt_llm/_torch/auto_deploy/custom_ops/quantization/quant.py"
+    )
+    linear = read("tensorrt_llm/_torch/modules/linear.py")
+
+    assert "capability in ((8, 9), (12, 0), (12, 1))" in quantization_ops
+    assert "capability[0] == 12 and capability[1] in (0, 1)" in linear
+
+
+def test_gb10_cutlass_moe_filters_sm121_shared_memory_configs():
+    heuristic = read("cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.cpp")
+    launcher = read(
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/launchers/"
+        "moe_gemm_tma_ws_launcher.inl"
+    )
+
+    assert "kMinSmemForFullTileSet = 120 * 1024" in heuristic
+    assert "cudaDevAttrMaxSharedMemoryPerBlockOptin" in heuristic
+    assert "std::remove_if(candidate_configs.begin()" in heuristic
+    assert "CtaShape128x128x64B" in heuristic
+    assert "sizeof(typename GemmKernel_::SharedStorage)" in launcher
+    assert "MoE grouped GEMM requires %d bytes shared memory" in launcher
+
+
+def test_gb10_allreduce_avoids_nccl_symmetric_tactics():
+    custom_ops = read("tensorrt_llm/_torch/custom_ops/torch_custom_ops.py")
+
+    assert "def _is_gb10() -> bool:" in custom_ops
+    assert '"GB10" in torch.cuda.get_device_name()' in custom_ops
+    assert "valid_strategies = [AllReduceStrategy.NCCL.value]" in custom_ops
+    assert "if _is_gb10() else AllReduceStrategy.NCCL_SYMMETRIC.value" in custom_ops
