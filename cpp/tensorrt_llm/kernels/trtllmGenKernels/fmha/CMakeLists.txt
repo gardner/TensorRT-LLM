@@ -75,16 +75,31 @@ target_compile_definitions(
   trtllm_gen_fmha_interface INTERFACE TLLM_GEN_EXPORT_INTERFACE
                                       TLLM_FMHA_TRTLLM_COMPAT)
 
-# Link the TrtLlmGen FMHA static library
-set(TRTLLM_GEN_FMHA_LIB
-    ${CMAKE_CURRENT_SOURCE_DIR}/lib/${TARGET_ARCH}/libTrtLlmGenFmhaLib.a)
-if(NOT EXISTS ${TRTLLM_GEN_FMHA_LIB})
-  message(
-    FATAL_ERROR
-      "TrtLlmGen FMHA library not found: ${TRTLLM_GEN_FMHA_LIB}. "
-      "Please ensure the pre-built archive exists under lib/${TARGET_ARCH}/.")
+set(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS FALSE)
+if("100" IN_LIST CMAKE_CUDA_ARCHITECTURES_ORIG
+   OR "103" IN_LIST CMAKE_CUDA_ARCHITECTURES_ORIG
+   OR "100f" IN_LIST CMAKE_CUDA_ARCHITECTURES_FAMILIES)
+  set(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS TRUE)
 endif()
-target_link_libraries(trtllm_gen_fmha PUBLIC ${TRTLLM_GEN_FMHA_LIB})
+
+# Link the TrtLlmGen FMHA static library
+if(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS)
+  target_compile_definitions(trtllm_gen_fmha
+                             PRIVATE TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS)
+  set(TRTLLM_GEN_FMHA_LIB
+      ${CMAKE_CURRENT_SOURCE_DIR}/lib/${TARGET_ARCH}/libTrtLlmGenFmhaLib.a)
+  if(NOT EXISTS ${TRTLLM_GEN_FMHA_LIB})
+    message(
+      FATAL_ERROR
+        "TrtLlmGen FMHA library not found: ${TRTLLM_GEN_FMHA_LIB}. "
+        "Please ensure the pre-built archive exists under lib/${TARGET_ARCH}/.")
+  endif()
+  target_link_libraries(trtllm_gen_fmha PUBLIC ${TRTLLM_GEN_FMHA_LIB})
+else()
+  message(
+    STATUS
+      "Skipping TrtLlmGen FMHA prebuilt archive: current CUDA architectures do not enable SM100/SM103 kernels.")
+endif()
 
 # Link the TrtLlmGen core library (contains GenLog::getInstance()
 # implementation)

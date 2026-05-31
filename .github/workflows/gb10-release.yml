@@ -37,6 +37,9 @@ on:
         default: true
         type: boolean
   push:
+    branches:
+      - "gb10-release-discipline"
+      - "gb10-integration"
     tags:
       - "gb10-trtllm-v*"
 
@@ -56,20 +59,25 @@ jobs:
       image_ref: ${{ steps.meta.outputs.image_ref }}
       image_name: ${{ steps.meta.outputs.image_name }}
       image_tag: ${{ steps.meta.outputs.image_tag }}
+      trt_llm_ver: ${{ steps.meta.outputs.trt_llm_ver }}
       base_tag: ${{ steps.meta.outputs.base_tag }}
       triton_base_tag: ${{ steps.meta.outputs.triton_base_tag }}
       cuda_archs: ${{ steps.meta.outputs.cuda_archs }}
+      push_image: ${{ steps.meta.outputs.push_image }}
+      publish_release: ${{ steps.meta.outputs.publish_release }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Resolve release metadata
         id: meta
         env:
-          INPUT_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs['release-tag'] || '' }}
-          INPUT_IMAGE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs['image-name'] || '' }}
-          INPUT_BASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs['base-tag'] || '26.02-py3' }}
-          INPUT_TRITON_BASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs['triton-base-tag'] || '26.02-py3' }}
-          INPUT_CUDA_ARCHS: ${{ github.event_name == 'workflow_dispatch' && inputs['cuda-archs'] || '121-real' }}
+          INPUT_RELEASE_TAG: ${{ github.event.inputs['release-tag'] || '' }}
+          INPUT_IMAGE_NAME: ${{ github.event.inputs['image-name'] || '' }}
+          INPUT_BASE_TAG: ${{ github.event.inputs['base-tag'] || '26.02-py3' }}
+          INPUT_TRITON_BASE_TAG: ${{ github.event.inputs['triton-base-tag'] || '26.02-py3' }}
+          INPUT_CUDA_ARCHS: ${{ github.event.inputs['cuda-archs'] || '121-real' }}
+          INPUT_PUSH_IMAGE: ${{ github.event.inputs['push-image'] || 'true' }}
+          INPUT_PUBLISH_RELEASE: ${{ github.event.inputs['publish-release'] || 'true' }}
         run: |
           set -euo pipefail
           release_tag="${INPUT_RELEASE_TAG}"
@@ -87,14 +95,25 @@ jobs:
           fi
           image_tag="${release_tag#gb10-trtllm-}"
           image_ref="${image_name}:${image_tag}"
+          trt_llm_ver="$(grep '^__version__' tensorrt_llm/version.py | grep -o '=.*' | tr -d '= "')"
+          test -n "${trt_llm_ver}"
+          push_image="true"
+          publish_release="true"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            push_image="${INPUT_PUSH_IMAGE:-true}"
+            publish_release="${INPUT_PUBLISH_RELEASE:-true}"
+          fi
 
           echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
           echo "image_ref=${image_ref}" >> "${GITHUB_OUTPUT}"
           echo "image_name=${image_name}" >> "${GITHUB_OUTPUT}"
           echo "image_tag=${image_tag}" >> "${GITHUB_OUTPUT}"
+          echo "trt_llm_ver=${trt_llm_ver}" >> "${GITHUB_OUTPUT}"
           echo "base_tag=${INPUT_BASE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "triton_base_tag=${INPUT_TRITON_BASE_TAG}" >> "${GITHUB_OUTPUT}"
           echo "cuda_archs=${INPUT_CUDA_ARCHS}" >> "${GITHUB_OUTPUT}"
+          echo "push_image=${push_image}" >> "${GITHUB_OUTPUT}"
+          echo "publish_release=${publish_release}" >> "${GITHUB_OUTPUT}"
 
   build:
     needs: setup
@@ -103,7 +122,7 @@ jobs:
       contents: read
       packages: write
     env:
-      BUILD_WHEEL_ARGS: --clean --benchmarks --generate_fmha --cuda_architectures=${{ needs.setup.outputs.cuda_archs }}
+      BUILD_WHEEL_ARGS: --clean --benchmarks --generate_fmha --cuda_architectures=${{ needs.setup.outputs.cuda_archs }} --extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,7 +132,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
-        if: github.event_name == 'push' || inputs['push-image'] == true
+        if: needs.setup.outputs.push_image == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -134,27 +153,15 @@ jobs:
             BASE_TAG=${{ needs.setup.outputs.base_tag }}
             TRITON_BASE_TAG=${{ needs.setup.outputs.triton_base_tag }}
             BUILD_WHEEL_ARGS=${{ env.BUILD_WHEEL_ARGS }}
+            TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}
             GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=gb10-trtllm
           cache-to: type=gha,mode=max,scope=gb10-trtllm
           provenance: false
           sbom: false
 
-      - name: Record wheel and image metadata
-        run: |
-          set -euo pipefail
-          test -n "$(find dist -maxdepth 1 -name 'tensorrt_llm*.whl' -print -quit)"
-          echo "${{ needs.setup.outputs.image_ref }}" > dist/image-ref.txt
-          ls -lh dist
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: trtllm-gb10-wheel
-          path: |
-            dist/tensorrt_llm*.whl
-            dist/image-ref.txt
-
       - name: Build and optionally push release image
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -162,21 +169,101 @@ jobs:
           target: release
           platforms: linux/arm64
           pull: true
-          push: ${{ github.event_name == 'push' || inputs['push-image'] == true }}
+          push: ${{ needs.setup.outputs.push_image == 'true' }}
           tags: ${{ needs.setup.outputs.image_ref }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.setup.outputs.release_tag }}
           build-args: |
             BASE_TAG=${{ needs.setup.outputs.base_tag }}
             TRITON_BASE_TAG=${{ needs.setup.outputs.triton_base_tag }}
             BUILD_WHEEL_ARGS=${{ env.BUILD_WHEEL_ARGS }}
+            TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}
             GIT_COMMIT=${{ github.sha }}
           cache-from: type=gha,scope=gb10-trtllm
           cache-to: type=gha,mode=max,scope=gb10-trtllm
           provenance: false
           sbom: false
 
+      - name: Record release metadata
+        env:
+          RELEASE_TAG: ${{ needs.setup.outputs.release_tag }}
+          IMAGE_REF: ${{ needs.setup.outputs.image_ref }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          TRT_LLM_VER: ${{ needs.setup.outputs.trt_llm_ver }}
+          CUDA_ARCHS: ${{ needs.setup.outputs.cuda_archs }}
+          BASE_TAG: ${{ needs.setup.outputs.base_tag }}
+          TRITON_BASE_TAG: ${{ needs.setup.outputs.triton_base_tag }}
+          PUSH_IMAGE: ${{ needs.setup.outputs.push_image }}
+        run: |
+          set -euo pipefail
+          wheel="$(find dist -maxdepth 1 -name 'tensorrt_llm*.whl' -print -quit)"
+          test -n "${wheel}"
+          sha256sum dist/tensorrt_llm*.whl > dist/SHA256SUMS
+          printf '%s\n' "${IMAGE_REF}" > dist/image-ref.txt
+          printf '%s\n' "${IMAGE_DIGEST:-not-pushed}" > dist/image-digest.txt
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = {
+              "release_tag": os.environ["RELEASE_TAG"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_url": (
+                  f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              ),
+              "image_ref": os.environ["IMAGE_REF"],
+              "image_digest": os.environ.get("IMAGE_DIGEST") or "not-pushed",
+              "image_pushed": os.environ["PUSH_IMAGE"] == "true",
+              "trt_llm_version": os.environ["TRT_LLM_VER"],
+              "cuda_architectures": os.environ["CUDA_ARCHS"],
+              "base_tag": os.environ["BASE_TAG"],
+              "triton_base_tag": os.environ["TRITON_BASE_TAG"],
+          }
+          Path("dist/release-metadata.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+          )
+          Path("dist/release-notes.md").write_text(
+              "\n".join(
+                  [
+                      "# GB10 TensorRT-LLM Release",
+                      "",
+                      f"- Commit: `{metadata['commit']}`",
+                      f"- TensorRT-LLM version: `{metadata['trt_llm_version']}`",
+                      f"- CUDA architectures: `{metadata['cuda_architectures']}`",
+                      f"- Image: `{metadata['image_ref']}`",
+                      f"- Image digest: `{metadata['image_digest']}`",
+                      f"- Workflow run: {metadata['run_url']}",
+                      "",
+                      "Artifacts attached to this release include the GB10 wheel,",
+                      "`SHA256SUMS`, `image-ref.txt`, `image-digest.txt`, and",
+                      "`release-metadata.json`.",
+                      "",
+                  ]
+              )
+          )
+          PY
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trtllm-gb10-wheel
+          path: |
+            dist/tensorrt_llm*.whl
+            dist/SHA256SUMS
+            dist/image-ref.txt
+            dist/image-digest.txt
+            dist/release-metadata.json
+            dist/release-notes.md
+
   publish:
     needs: [setup, build]
-    if: github.event_name == 'push' || inputs['publish-release'] == true
+    if: needs.setup.outputs.publish_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -195,7 +282,13 @@ jobs:
           if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release create "${RELEASE_TAG}" \
               --title "${RELEASE_TAG}" \
-              --notes "GB10 Spark TensorRT-LLM release with native SM121A wheel and container image." \
+              --target "${GITHUB_SHA}" \
+              --notes-file dist/release-notes.md \
+              --prerelease
+          else
+            gh release edit "${RELEASE_TAG}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file dist/release-notes.md \
               --prerelease
           fi
           gh release upload "${RELEASE_TAG}" dist/* --clobber

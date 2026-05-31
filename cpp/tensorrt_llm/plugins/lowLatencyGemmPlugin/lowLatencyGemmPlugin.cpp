@@ -17,7 +17,6 @@
  */
 
 #include "lowLatencyGemmPlugin.h"
-#include "low_latency_gemm.h"
 #include "tensorrt_llm/common/assert.h"
 #include "tensorrt_llm/common/cudaFp8Utils.h"
 #include "tensorrt_llm/common/logger.h"
@@ -33,7 +32,7 @@
 
 using namespace nvinfer1;
 using namespace tensorrt_llm::common;
-using namespace tensorrt_llm::kernels::internal_cutlass_kernels;
+using namespace tensorrt_llm::plugins::low_latency_gemm;
 using tensorrt_llm::plugins::LowLatencyGemmPluginCreator;
 using tensorrt_llm::plugins::LowLatencyGemmPlugin;
 using tensorrt_llm::plugins::LowLatencyGemmPluginProfiler;

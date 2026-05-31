@@ -20,12 +20,23 @@
 #include "tensorrt_llm/kernels/contextFusedMultiHeadAttention/fused_multihead_attention_common.h"
 #include "tensorrt_llm/kernels/multiHeadAttentionCommon.h"
 
+#if defined(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS)
+#include "fmhaKernels.h"
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TRTLLM_NAMESPACE_BEGIN
 
 namespace kernels
 {
+
+namespace
+{
+
+char const* kUnavailableMessage = "TrtLlmGen FMHA kernels are only built for SM100/SM103.";
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -41,6 +52,7 @@ TllmGenFmhaRunner::TllmGenFmhaRunner(Data_type dtypeQ, Data_type dtypeK, Data_ty
     , mNumEltsPerSageAttnBlkP(numEltsPerSageAttnBlkP)
     , mNumEltsPerSageAttnBlkV(numEltsPerSageAttnBlkV)
 {
+#if defined(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS)
     TLLM_CHECK_WITH_INFO(mSM == kSM_100 || mSM == kSM_103, "Unsupported architecture");
     TLLM_CHECK_WITH_INFO(mDtypeQ == DATA_TYPE_E4M3 || mDtypeQ == DATA_TYPE_FP16 || mDtypeQ == DATA_TYPE_BF16
             || mDtypeQ == DATA_TYPE_INT8,
@@ -59,27 +71,51 @@ TllmGenFmhaRunner::TllmGenFmhaRunner(Data_type dtypeQ, Data_type dtypeK, Data_ty
     TLLM_CHECK_WITH_INFO(mTotalDeviceMemory > 0, "Total device memory is invalid");
     mKernel = getTllmFmhaKernels(mDtypeQ, mDtypeK, mDtypeV, mDtypeOut, mSM, numEltsPerSageAttnBlkQ,
         numEltsPerSageAttnBlkK, numEltsPerSageAttnBlkP, numEltsPerSageAttnBlkV);
+#else
+    TLLM_CHECK_WITH_INFO(false, "%s", kUnavailableMessage);
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TllmGenFmhaRunner::run(TllmGenFmhaRunnerParams const& runnerParams)
 {
+#if defined(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS)
+    TLLM_CHECK_WITH_INFO(mKernel != nullptr, "TrtLlmGen FMHA kernel is not initialized");
     mKernel->run(runnerParams);
+#else
+    TLLM_THROW("%s", kUnavailableMessage);
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool TllmGenFmhaRunner::isSupported(TllmGenFmhaRunnerParams const& runnerParams) const
 {
+#if defined(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS)
+    if (mKernel == nullptr)
+    {
+        return false;
+    }
     return mKernel->checkIfKernelExist(runnerParams).first;
+#else
+    return false;
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 std::pair<bool, std::string> TllmGenFmhaRunner::isSupportedWithInfo(TllmGenFmhaRunnerParams const& runnerParams) const
 {
+#if defined(TRTLLM_GEN_FMHA_HAS_PREBUILT_KERNELS)
+    if (mKernel == nullptr)
+    {
+        return {false, "TrtLlmGen FMHA kernel is not initialized"};
+    }
     return mKernel->checkIfKernelExist(runnerParams);
+#else
+    return {false, kUnavailableMessage};
+#endif
 }
 
 size_t TllmGenFmhaRunner::getTotalDeviceMemory() const

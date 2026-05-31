@@ -17,7 +17,11 @@
 
 #pragma once
 
+#if defined(TRTLLM_HAS_PREBUILT_INTERNAL_CUTLASS_KERNELS)
 #include "low_latency_gemm.h"
+#else
+#include "tensorrt_llm/kernels/cutlass_kernels/include/low_latency_gemm.h"
+#endif
 
 #include "tensorrt_llm/plugins/common/gemmPluginProfiler.h"
 #include "tensorrt_llm/plugins/common/plugin.h"
@@ -31,17 +35,24 @@
 namespace tensorrt_llm::plugins
 {
 
+namespace low_latency_gemm = tensorrt_llm::kernels::
+#if defined(TRTLLM_HAS_PREBUILT_INTERNAL_CUTLASS_KERNELS)
+    internal_cutlass_kernels
+#else
+    cutlass_kernels
+#endif
+    ;
+
 using LowLatencyGemmRunnerPtr
-    = std::shared_ptr<tensorrt_llm::kernels::internal_cutlass_kernels::CutlassLowLatencyFp8GemmRunnerInterface>;
+    = std::shared_ptr<low_latency_gemm::CutlassLowLatencyFp8GemmRunnerInterface>;
 
 class LowLatencyGemmPluginProfiler
-    : public GemmPluginProfiler<
-          tensorrt_llm::kernels::internal_cutlass_kernels::CutlassLowLatencyFp8GemmRunnerInterface::ConfigType,
+    : public GemmPluginProfiler<low_latency_gemm::CutlassLowLatencyFp8GemmRunnerInterface::ConfigType,
           LowLatencyGemmRunnerPtr, GemmIdCore, GemmIdCoreHash>
 {
 
 public:
-    using Config = tensorrt_llm::kernels::internal_cutlass_kernels::CutlassLowLatencyFp8GemmRunnerInterface::ConfigType;
+    using Config = low_latency_gemm::CutlassLowLatencyFp8GemmRunnerInterface::ConfigType;
 
 protected:
     void runTactic(int m, int n, int k, Config const& tactic, char* workspace, cudaStream_t const& stream) override;

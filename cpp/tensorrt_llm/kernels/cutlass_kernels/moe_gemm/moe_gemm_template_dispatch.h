@@ -205,6 +205,9 @@ struct genericMoeGemmKernelLauncher
                                                                                                // kernel.. (only support
                                                                                                // fp16 or bf16)
         {
+#if defined(EXCLUDE_SM_80)
+            TLLM_THROW("Fused MoE SM80 launcher is not built for this architecture set.");
+#else
             tensorrt_llm::kernels::cutlass_kernels_oss::sm80_generic_fused_moe_gemm_kernelLauncher<ElementType,
                 CutlassWeightType, ThreadblockShape::kM, ThreadblockShape::kN, ThreadblockShape::kK, Stages,
                 EpilogueTag>(reinterpret_cast<ElementType const*>(inputs.A),
@@ -212,6 +215,7 @@ struct genericMoeGemmKernelLauncher
                 reinterpret_cast<ElementType const*>(inputs.biases), inputs.bias_is_broadcast,
                 reinterpret_cast<ElementType*>(inputs.C), inputs.total_tokens_including_expert, inputs.num_rows,
                 inputs.n, inputs.k, inputs.num_experts, sm_count_, inputs.stream, inputs.occupancy);
+#endif
         }
     }
 };

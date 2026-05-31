@@ -15,10 +15,17 @@
 # the License.
 #
 
-file(GLOB_RECURSE SRC_CPP *.cpp)
-file(GLOB_RECURSE SRC_CU *.cu)
+if("90" IN_LIST CMAKE_CUDA_ARCHITECTURES_ORIG)
+  file(GLOB_RECURSE SRC_CPP *.cpp)
+  file(GLOB_RECURSE SRC_CU *.cu)
+else()
+  set(SRC_CPP flash_mla_stub.cpp)
+  set(SRC_CU)
+endif()
 
 add_library(flash_mla_src OBJECT ${SRC_CPP} ${SRC_CU})
 set_property(TARGET flash_mla_src PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET flash_mla_src PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
-set_cuda_architectures(flash_mla_src 90)
+if("90" IN_LIST CMAKE_CUDA_ARCHITECTURES_ORIG)
+  set_cuda_architectures(flash_mla_src 90)
+endif()

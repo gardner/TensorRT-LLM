@@ -108,6 +108,11 @@ endif()
 
 add_library(${PLUGIN_SHARED_TARGET} SHARED ${PLUGIN_SOURCES})
 add_cuda_architectures(${PLUGIN_SHARED_TARGET} 89)
+if(TRTLLM_HAS_PREBUILT_INTERNAL_CUTLASS_KERNELS
+   OR INTERNAL_CUTLASS_KERNELS_PATH)
+  target_compile_definitions(${PLUGIN_SHARED_TARGET}
+                             PRIVATE TRTLLM_HAS_PREBUILT_INTERNAL_CUTLASS_KERNELS)
+endif()
 
 target_include_directories(
   ${PLUGIN_SHARED_TARGET}
@@ -129,6 +134,8 @@ endif()
 if(USING_OSS_CUTLASS_MOE_GEMM)
   target_compile_definitions(${PLUGIN_SHARED_TARGET}
                              PUBLIC USING_OSS_CUTLASS_MOE_GEMM)
+  target_link_libraries(${PLUGIN_SHARED_TARGET} moe_gemm_src kernels_src cutlass_src)
+  target_link_libraries(${PLUGIN_SHARED_TARGET} fp8_blockscale_gemm_src)
 endif()
 
 if(ENABLE_MULTI_DEVICE)

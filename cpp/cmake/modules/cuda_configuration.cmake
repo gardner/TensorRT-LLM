@@ -548,7 +548,7 @@ function(set_cuda_architectures target)
   endforeach()
   if("${CUDA_ARCHITECTURES}" STREQUAL "")
     # We have to at least build for some architectures.
-    set_property(TARGET ${target} PROPERTY CUDA_ARCHITECTURES "80-real")
+    set_property(TARGET ${target} PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}")
     target_compile_definitions(${target} PRIVATE PLACEHOLDER_KERNELS)
   else()
     set_property(TARGET ${target} PROPERTY CUDA_ARCHITECTURES

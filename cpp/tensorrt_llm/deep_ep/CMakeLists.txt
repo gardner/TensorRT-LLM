@@ -10,25 +10,30 @@ add_custom_target(deep_ep)
 # Filter CUDA arch >= 9.0
 set(DEEP_EP_CUDA_ARCHITECTURES "")
 foreach(CUDA_ARCH IN LISTS CMAKE_CUDA_ARCHITECTURES)
-  string(REGEX MATCHALL "^([1-9][0-9]*)([0-9])[af]?(-real|-virtual)?$" MATCHES
-               ${CUDA_ARCH})
+  string(REGEX MATCH "^([1-9][0-9]*)([0-9])([af]?)(-real|-virtual)?$"
+               MATCHES "${CUDA_ARCH}")
   if(NOT CMAKE_MATCH_0)
     message(FATAL_ERROR "Invalid CUDA arch format: \"${CUDA_ARCH}\"")
   endif()
   set(CUDA_ARCH_MAJOR ${CMAKE_MATCH_1})
   set(CUDA_ARCH_MINOR ${CMAKE_MATCH_2})
-  set(CUDA_ARCH_POSTFIX ${CMAKE_MATCH_3})
+  set(CUDA_ARCH_FEATURE ${CMAKE_MATCH_3})
+  set(CUDA_ARCH_POSTFIX ${CMAKE_MATCH_4})
   if(${CUDA_ARCH_MAJOR} GREATER_EQUAL 9)
-    # The FP4-related conversion instructions in DeepEP require SM100a, SM110a,
-    # or SM120a.
-    if(${CUDA_ARCH_MAJOR} EQUAL 10 AND ${CUDA_ARCH_MINOR} EQUAL 0)
+    # The FP4-related conversion instructions in DeepEP require feature-specific
+    # Blackwell targets such as SM100a, SM120a, or SM121a.
+    if(CUDA_ARCH_FEATURE)
+      list(APPEND DEEP_EP_CUDA_ARCHITECTURES
+           "${CUDA_ARCH_MAJOR}${CUDA_ARCH_MINOR}${CUDA_ARCH_FEATURE}${CUDA_ARCH_POSTFIX}"
+      )
+    elseif(${CUDA_ARCH_MAJOR} EQUAL 10 AND ${CUDA_ARCH_MINOR} EQUAL 0)
       if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.31)
         list(APPEND DEEP_EP_CUDA_ARCHITECTURES "100f${CUDA_ARCH_POSTFIX}")
       else()
         list(APPEND DEEP_EP_CUDA_ARCHITECTURES "100a${CUDA_ARCH_POSTFIX}"
              "103a${CUDA_ARCH_POSTFIX}")
       endif()
-    elseif(${CUDA_ARCH_MAJOR} GREATER_EQUAL 10 AND ${CUDA_ARCH_MINOR} EQUAL 0)
+    elseif(${CUDA_ARCH_MAJOR} GREATER_EQUAL 10)
       list(APPEND DEEP_EP_CUDA_ARCHITECTURES
            "${CUDA_ARCH_MAJOR}${CUDA_ARCH_MINOR}a${CUDA_ARCH_POSTFIX}")
     else()

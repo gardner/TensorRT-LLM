@@ -78,6 +78,9 @@ if(ENABLE_NVSHMEM)
   include_directories(/usr/include/nvshmem/)
 endif()
 
+option(TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS "Use prebuilt internal CUTLASS kernels when no source path is provided" ON)
+set(TRTLLM_HAS_PREBUILT_INTERNAL_CUTLASS_KERNELS OFF)
+
 if(NOT WIN32)
   set(DECODER_SHARED_TARGET_0 decoder_attention_0)
   set(DECODER_SHARED_TARGET_1 decoder_attention_1)
@@ -100,7 +103,9 @@ endif()
 set(INTERNAL_CUTLASS_KERNELS_TARGET
     tensorrt_llm_internal_cutlass_kernels_static)
 set(INTERNAL_CUTLASS_KERNELS_TARGET_ARCH ${TARGET_ARCH})
-if(NOT INTERNAL_CUTLASS_KERNELS_PATH)
+if(NOT INTERNAL_CUTLASS_KERNELS_PATH
+   AND TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS)
+  set(TRTLLM_HAS_PREBUILT_INTERNAL_CUTLASS_KERNELS ON)
   add_library(${INTERNAL_CUTLASS_KERNELS_TARGET} STATIC IMPORTED)
   set(INTERNAL_CUTLASS_KERNELS_LIB_TARBALL
       "${CMAKE_CURRENT_SOURCE_DIR}/kernels/internal_cutlass_kernels/${INTERNAL_CUTLASS_KERNELS_TARGET_ARCH}/${INTERNAL_CUTLASS_KERNELS_TARGET}.tar.xz"
@@ -138,6 +143,12 @@ if(NOT INTERNAL_CUTLASS_KERNELS_PATH)
         "The internal_cutlass_kernels library is truncated or incomplete. This is usually caused by using Git LFS (Large File Storage) incorrectly. Please try running command `git lfs install && git lfs pull`."
     )
   endif()
+elseif(NOT INTERNAL_CUTLASS_KERNELS_PATH)
+  add_library(${INTERNAL_CUTLASS_KERNELS_TARGET} INTERFACE)
+  target_include_directories(
+    ${INTERNAL_CUTLASS_KERNELS_TARGET}
+    INTERFACE
+      "${CMAKE_CURRENT_SOURCE_DIR}/kernels/internal_cutlass_kernels/include")
 endif()
 
 add_subdirectory(common)
@@ -203,6 +214,8 @@ set(TRTLLM_LINK_LIBS
     userbuffers_src
     ${DECODER_SHARED_TARGET_0}
     ${DECODER_SHARED_TARGET_1})
+set(TRTLLM_PRIVATE_LINK_LIBS "")
+
 if(USING_OSS_CUTLASS_LOW_LATENCY_GEMM)
   set(TRTLLM_LINK_LIBS ${TRTLLM_LINK_LIBS} low_latency_gemm_src)
   message(STATUS "USING_OSS_CUTLASS_LOW_LATENCY_GEMM")
@@ -214,7 +227,7 @@ if(USING_OSS_CUTLASS_FP4_GEMM)
 endif()
 
 if(USING_OSS_CUTLASS_MOE_GEMM)
-  set(TRTLLM_LINK_LIBS ${TRTLLM_LINK_LIBS} moe_gemm_src)
+  set(TRTLLM_PRIVATE_LINK_LIBS ${TRTLLM_PRIVATE_LINK_LIBS} moe_gemm_src)
   message(STATUS "USING_OSS_CUTLASS_MOE_GEMM")
 endif()
 
@@ -252,13 +265,20 @@ set_target_properties(
              LINK_FLAGS "${AS_NEEDED_FLAG} ${UNDEFINED_FLAG}")
 
 target_link_libraries(${SHARED_TARGET} PUBLIC ${TRTLLM_LINK_LIBS})
+target_link_libraries(${SHARED_TARGET} PRIVATE ${TRTLLM_PRIVATE_LINK_LIBS})
 
 target_link_libraries(
   ${SHARED_TARGET}
   PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${BATCH_MANAGER_TARGET}>
           $<LINK_LIBRARY:WHOLE_ARCHIVE,${EXECUTOR_TARGET}>
-          $<LINK_LIBRARY:WHOLE_ARCHIVE,fp8_blockscale_gemm_src>
-          $<LINK_LIBRARY:WHOLE_ARCHIVE,${INTERNAL_CUTLASS_KERNELS_TARGET}>)
+          $<LINK_LIBRARY:WHOLE_ARCHIVE,fp8_blockscale_gemm_src>)
+
+if(TRTLLM_HAS_PREBUILT_INTERNAL_CUTLASS_KERNELS
+   OR INTERNAL_CUTLASS_KERNELS_PATH)
+  target_link_libraries(
+    ${SHARED_TARGET}
+    PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${INTERNAL_CUTLASS_KERNELS_TARGET}>)
+endif()
 
 # Link kernel_src and cutlass_src. static internal cutlass lib overridden.
 target_link_libraries(${SHARED_TARGET} PUBLIC kernels_src cutlass_src)

@@ -136,6 +136,8 @@ endif()
 
 if(USING_OSS_CUTLASS_MOE_GEMM)
   target_compile_definitions(th_common PUBLIC USING_OSS_CUTLASS_MOE_GEMM)
+  target_link_libraries(th_common PRIVATE moe_gemm_src kernels_src cutlass_src)
+  target_link_libraries(th_common PRIVATE fp8_blockscale_gemm_src)
 endif()
 
 if(ENABLE_CUBLASLT_FP4_GEMM)

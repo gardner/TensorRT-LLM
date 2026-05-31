@@ -148,7 +148,7 @@ function(add_instantiations library base_dir)
   glob_src_create_target(90 90)
   glob_src_create_target(100 100f)
   glob_src_create_target(103 103)
-  glob_src_create_target(120 120f)
+  glob_src_create_target(120 "120f;121")
 endfunction()
 
 # Get the sources for Mixed Input GEMM launchers
@@ -205,12 +205,12 @@ add_cuda_architectures(fpA_intB_gemm_src 89)
 add_instantiations(fpA_intB_gemm_src ${INSTANTIATION_GENERATION_DIR}/gemm)
 
 add_library(fb_gemm_src STATIC ${FBGEMM_SRC_CU} ${FBGEMM_CU_INSTANTIATIONS})
-set_cuda_architectures(fb_gemm_src 89 90 100f 120f)
+set_cuda_architectures(fb_gemm_src 89 90 100f 120f 121)
 # add_instantiations(fb_gemm_src
 # ${INSTANTIATION_GENERATION_DIR}/fp8_rowwise_gemm)
 
 add_library(fp8_blockscale_gemm_src STATIC ${FP8_BLOCKSCALE_GEMM_SRC_CU})
-set_cuda_architectures(fp8_blockscale_gemm_src 89 90 100f 120f)
+set_cuda_architectures(fp8_blockscale_gemm_src 89 90 100f 120f 121)
 
 set(GEMM_SWIGLU_SM90_SRC_CU
     ${CMAKE_CURRENT_SOURCE_DIR}/fused_gated_gemm/gemm_swiglu_e4m3.cu)
@@ -229,7 +229,7 @@ endif()
 if(USING_OSS_CUTLASS_FP4_GEMM)
   file(GLOB FP4_SRC_CU "${CMAKE_CURRENT_SOURCE_DIR}/fp4_gemm/*.cu")
   add_library(fp4_gemm_src STATIC ${FP4_SRC_CU})
-  set_cuda_architectures(fp4_gemm_src 100f 120f)
+  set_cuda_architectures(fp4_gemm_src 100f 120f 121)
   # add_instantiations(fp4_gemm_src ${INSTANTIATION_GENERATION_DIR}/fp4_gemm)
 endif()
 
@@ -268,6 +268,12 @@ if(USING_OSS_CUTLASS_MOE_GEMM)
   process_target(_moe_gemm_fp8 true true)
 
   add_instantiations(moe_gemm_src ${INSTANTIATION_GENERATION_DIR}/gemm_grouped)
+  target_sources(
+    moe_gemm_src
+    PRIVATE $<TARGET_OBJECTS:_moe_gemm_launcher>
+            $<TARGET_OBJECTS:_moe_gemm_hopper_fp4>
+            $<TARGET_OBJECTS:_moe_gemm_fp4>
+            $<TARGET_OBJECTS:_moe_gemm_fp8>)
   target_link_libraries(
     moe_gemm_src PRIVATE _moe_gemm_launcher _moe_gemm_hopper_fp4 _moe_gemm_fp4
                          _moe_gemm_fp8)

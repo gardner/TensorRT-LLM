@@ -18,15 +18,20 @@
 
 #include <cuda_runtime.h>
 
-#include "fmhaKernels.h"
 #include "fmhaRunnerParams.h"
 #include "tensorrt_llm/common/config.h"
 #include "tensorrt_llm/kernels/multiHeadAttentionCommon.h"
+
+#include <cstddef>
+#include <string>
+#include <utility>
 
 TRTLLM_NAMESPACE_BEGIN
 
 namespace kernels
 {
+
+class TllmGenFmhaKernel;
 
 class TllmGenFmhaRunner
 {
@@ -52,18 +57,21 @@ public:
 
 private:
     // The input/output datatype.
-    Data_type mDtypeQ, mDtypeK, mDtypeV, mDtypeOut;
+    Data_type mDtypeQ{};
+    Data_type mDtypeK{};
+    Data_type mDtypeV{};
+    Data_type mDtypeOut{};
     // The SM version.
-    int mSM;
+    int mSM{};
     // The total device memory.
-    size_t mTotalDeviceMemory;
+    size_t mTotalDeviceMemory{};
     // The class that stores all the kernels.
-    TllmGenFmhaKernel* mKernel;
+    TllmGenFmhaKernel* mKernel{};
     // SageAttention extensions.
-    int mNumEltsPerSageAttnBlkQ;
-    int mNumEltsPerSageAttnBlkK;
-    int mNumEltsPerSageAttnBlkP;
-    int mNumEltsPerSageAttnBlkV;
+    int mNumEltsPerSageAttnBlkQ{};
+    int mNumEltsPerSageAttnBlkK{};
+    int mNumEltsPerSageAttnBlkP{};
+    int mNumEltsPerSageAttnBlkV{};
 };
 
 } // namespace kernels

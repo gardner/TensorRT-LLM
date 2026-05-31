@@ -40,7 +40,7 @@ DOCKER_PROGRESS    ?= auto
 PLATFORM           ?= $(shell uname -m | grep -q 'aarch64' && echo "arm64" || echo "amd64")
 CUDA_ARCHS         ?= $(if $(filter arm64,$(PLATFORM)),'121-real',)
 BUILD_WHEEL_OPTS   ?=
-BUILD_WHEEL_ARGS   ?= $(shell grep '^ARG BUILD_WHEEL_ARGS=' Dockerfile.multi | grep -o '=.*' | tr -d '="')$(if $(CUDA_ARCHS), --cuda_architectures $(CUDA_ARCHS))$(if $(BUILD_WHEEL_OPTS), $(BUILD_WHEEL_OPTS))
+BUILD_WHEEL_ARGS   ?= $(shell grep '^ARG BUILD_WHEEL_ARGS=' Dockerfile.multi | grep -o '=.*' | tr -d '="')$(if $(CUDA_ARCHS), --cuda_architectures $(CUDA_ARCHS) --extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF)$(if $(BUILD_WHEEL_OPTS), $(BUILD_WHEEL_OPTS))
 BUILD_WHEEL_SCRIPT ?=
 TORCH_INSTALL_TYPE ?= skip
 CUDA_VERSION       ?=

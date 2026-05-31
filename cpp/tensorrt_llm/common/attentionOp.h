@@ -29,6 +29,8 @@
 #include "tensorrt_llm/kernels/mlaKernels.h"
 #include "tensorrt_llm/kernels/sparseAttentionKernels.h"
 #include "tensorrt_llm/kernels/xqaDispatcher.h"
+#include "cutlass/fast_math.h"
+#include "cutlass/numeric_types.h"
 #include <cassert>
 #include <set>
 #include <string>
