@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -50,6 +49,24 @@ def test_gb10_release_passes_trt_llm_version_to_docker_builds():
         "--extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF"
         in docker_makefile
     )
+
+
+def test_gb10_release_bounds_remote_downloads_and_build_steps():
+    workflow = read(".github/workflows/gb10-release.yml")
+    dockerfile = read("docker/Dockerfile.multi")
+    install_tensorrt = read("docker/common/install_tensorrt.sh")
+
+    assert "cancel-in-progress: true" in workflow
+    assert "timeout-minutes: 360" in workflow
+    assert "timeout-minutes: 180" in workflow
+    assert workflow.count("TRT_DOWNLOAD_MAX_SECONDS=1200") == 2
+    assert "ARG TRT_DOWNLOAD_MAX_SECONDS=1200" in dockerfile
+    assert "TRT_DOWNLOAD_MAX_SECONDS=${TRT_DOWNLOAD_MAX_SECONDS}" in dockerfile
+    assert "TRT_DOWNLOAD_MAX_SECONDS:-1200" in install_tensorrt
+    assert "timeout --preserve-status" in install_tensorrt
+    assert "curl --fail --location" in install_tensorrt
+    assert "--speed-limit 1048576" in install_tensorrt
+    assert "--speed-time 180" in install_tensorrt
 
 
 def test_cmake_and_docker_defaults_allow_native_sm121a():

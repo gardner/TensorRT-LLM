@@ -135,7 +135,7 @@ install_tensorrt() {
         RELEASE_URL_TRT="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/${TRT_VER_SHORT}/tars/TensorRT-${TRT_VER}.Linux.${ARCH}-gnu.cuda-${TRT_CUDA_VERSION}.tar.gz"
     fi
 
-    wget --retry-connrefused --timeout=180 --tries=10 --continue ${RELEASE_URL_TRT} -O /tmp/TensorRT.tar
+    download_tensorrt_archive "${RELEASE_URL_TRT}" /tmp/TensorRT.tar
     tar -xf /tmp/TensorRT.tar -C /usr/local/
     mv /usr/local/TensorRT-${TRT_VER} /usr/local/tensorrt
     pip3 install --no-cache-dir /usr/local/tensorrt/python/tensorrt-*-cp${PARSED_PY_VERSION}-*.whl
@@ -149,6 +149,35 @@ install_tensorrt() {
           /usr/local/tensorrt/lib/libnvinfer_lean_static.a \
           /usr/local/tensorrt/lib/libnvonnxparser_static.a \
           /usr/local/tensorrt/lib/libnvinfer_builder_resource_win.so.*
+}
+
+download_tensorrt_archive() {
+    local url="${1}"
+    local output="${2}"
+    local partial="${output}.part"
+    local max_seconds="${TRT_DOWNLOAD_MAX_SECONDS:-1200}"
+
+    rm -f "${output}" "${partial}"
+    echo "Downloading TensorRT from ${url}"
+    echo "TensorRT download hard timeout: ${max_seconds}s"
+
+    if command -v curl >/dev/null 2>&1; then
+        timeout --preserve-status "${max_seconds}s" \
+            curl --fail --location --show-error \
+                 --retry 5 --retry-all-errors --retry-delay 10 \
+                 --connect-timeout 30 \
+                 --speed-limit 1048576 --speed-time 180 \
+                 --max-time "${max_seconds}" \
+                 --output "${partial}" \
+                 "${url}"
+    else
+        timeout --preserve-status "${max_seconds}s" \
+            wget --retry-connrefused --timeout=60 --tries=5 \
+                 --continue "${url}" -O "${partial}"
+    fi
+
+    test -s "${partial}"
+    mv "${partial}" "${output}"
 }
 
 # Install base packages depending on the base OS
