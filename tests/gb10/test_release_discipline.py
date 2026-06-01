@@ -65,6 +65,10 @@ def test_gb10_release_bounds_remote_downloads_and_build_steps():
     assert "TRT_DOWNLOAD_MAX_SECONDS:-1200" in install_tensorrt
     assert "timeout --preserve-status" in install_tensorrt
     assert "curl --fail --location" in install_tensorrt
+    assert "tar --extract --gzip --file -" in install_tensorrt
+    assert "--exclude=\"TensorRT-${TRT_VER}/lib/*.a\"" in install_tensorrt
+    assert "--exclude=\"TensorRT-${TRT_VER}/lib/libnvinfer_builder_resource_win.so.*\"" in install_tensorrt
+    assert "/tmp/TensorRT.tar" not in install_tensorrt
     assert "--speed-limit 1048576" in install_tensorrt
     assert "--speed-time 180" in install_tensorrt
 

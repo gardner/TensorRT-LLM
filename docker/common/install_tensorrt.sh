@@ -135,11 +135,9 @@ install_tensorrt() {
         RELEASE_URL_TRT="https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/${TRT_VER_SHORT}/tars/TensorRT-${TRT_VER}.Linux.${ARCH}-gnu.cuda-${TRT_CUDA_VERSION}.tar.gz"
     fi
 
-    download_tensorrt_archive "${RELEASE_URL_TRT}" /tmp/TensorRT.tar
-    tar -xf /tmp/TensorRT.tar -C /usr/local/
+    extract_tensorrt_archive "${RELEASE_URL_TRT}" /usr/local/
     mv /usr/local/TensorRT-${TRT_VER} /usr/local/tensorrt
     pip3 install --no-cache-dir /usr/local/tensorrt/python/tensorrt-*-cp${PARSED_PY_VERSION}-*.whl
-    rm -rf /tmp/TensorRT.tar
     echo 'export LD_LIBRARY_PATH=/usr/local/tensorrt/lib:$LD_LIBRARY_PATH' >> "${ENV}"
 
     rm -f /usr/local/tensorrt/lib/libnvinfer_vc_plugin_static.a \
@@ -151,33 +149,41 @@ install_tensorrt() {
           /usr/local/tensorrt/lib/libnvinfer_builder_resource_win.so.*
 }
 
-download_tensorrt_archive() {
+extract_tensorrt_archive() {
     local url="${1}"
-    local output="${2}"
-    local partial="${output}.part"
+    local output_dir="${2}"
     local max_seconds="${TRT_DOWNLOAD_MAX_SECONDS:-1200}"
 
-    rm -f "${output}" "${partial}"
     echo "Downloading TensorRT from ${url}"
+    echo "Extracting TensorRT to ${output_dir}"
     echo "TensorRT download hard timeout: ${max_seconds}s"
 
     if command -v curl >/dev/null 2>&1; then
-        timeout --preserve-status "${max_seconds}s" \
-            curl --fail --location --show-error \
-                 --retry 5 --retry-all-errors --retry-delay 10 \
-                 --connect-timeout 30 \
-                 --speed-limit 1048576 --speed-time 180 \
-                 --max-time "${max_seconds}" \
-                 --output "${partial}" \
-                 "${url}"
+        (
+            set -o pipefail
+            timeout --preserve-status "${max_seconds}s" \
+                curl --fail --location --show-error \
+                     --retry 5 --retry-all-errors --retry-delay 10 \
+                     --connect-timeout 30 \
+                     --speed-limit 1048576 --speed-time 180 \
+                     --max-time "${max_seconds}" \
+                     --output - \
+                     "${url}" \
+                | tar --extract --gzip --file - --directory "${output_dir}" \
+                      --exclude="TensorRT-${TRT_VER}/lib/*.a" \
+                      --exclude="TensorRT-${TRT_VER}/lib/libnvinfer_builder_resource_win.so.*"
+        )
     else
-        timeout --preserve-status "${max_seconds}s" \
-            wget --retry-connrefused --timeout=60 --tries=5 \
-                 --continue "${url}" -O "${partial}"
+        (
+            set -o pipefail
+            timeout --preserve-status "${max_seconds}s" \
+                wget --retry-connrefused --timeout=60 --tries=5 \
+                     "${url}" -O - \
+                | tar --extract --gzip --file - --directory "${output_dir}" \
+                      --exclude="TensorRT-${TRT_VER}/lib/*.a" \
+                      --exclude="TensorRT-${TRT_VER}/lib/libnvinfer_builder_resource_win.so.*"
+        )
     fi
-
-    test -s "${partial}"
-    mv "${partial}" "${output}"
 }
 
 # Install base packages depending on the base OS
