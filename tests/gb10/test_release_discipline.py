@@ -41,14 +41,8 @@ def test_gb10_release_passes_trt_llm_version_to_docker_builds():
     assert 'echo "trt_llm_ver=${trt_llm_ver}"' in workflow
     assert workflow.count("TRT_LLM_VER=${{ needs.setup.outputs.trt_llm_ver }}") == 3
     assert dockerfile.count("ARG TRT_LLM_VER=dev") == 2
-    assert (
-        "--extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF"
-        in workflow
-    )
-    assert (
-        "--extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF"
-        in docker_makefile
-    )
+    assert "--extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF" in workflow
+    assert "--extra-cmake-vars TRTLLM_USE_PREBUILT_INTERNAL_CUTLASS_KERNELS=OFF" in docker_makefile
 
 
 def test_gb10_release_bounds_remote_downloads_and_build_steps():
@@ -66,8 +60,11 @@ def test_gb10_release_bounds_remote_downloads_and_build_steps():
     assert "timeout --preserve-status" in install_tensorrt
     assert "curl --fail --location" in install_tensorrt
     assert "tar --extract --gzip --file -" in install_tensorrt
-    assert "--exclude=\"TensorRT-${TRT_VER}/lib/*.a\"" in install_tensorrt
-    assert "--exclude=\"TensorRT-${TRT_VER}/lib/libnvinfer_builder_resource_win.so.*\"" in install_tensorrt
+    assert '--exclude="TensorRT-${TRT_VER}/lib/*.a"' in install_tensorrt
+    assert (
+        '--exclude="TensorRT-${TRT_VER}/lib/libnvinfer_builder_resource_win.so.*"'
+        in install_tensorrt
+    )
     assert "/tmp/TensorRT.tar" not in install_tensorrt
     assert "--speed-limit 1048576" in install_tensorrt
     assert "--speed-time 180" in install_tensorrt
@@ -83,10 +80,7 @@ def test_gb10_release_publishes_reusable_devel_base_image():
     assert 'devel_hash="$(' in workflow
     assert 'devel_image_ref="${image_name}:devel-${image_tag}"' in workflow
     assert 'devel_cache_ref="${image_name}:devel-cache-${devel_hash}"' in workflow
-    assert (
-        'devel_buildcache_ref="${image_name}:devel-buildcache-${devel_hash}"'
-        in workflow
-    )
+    assert 'devel_buildcache_ref="${image_name}:devel-buildcache-${devel_hash}"' in workflow
     assert "Check reusable devel base image" in workflow
     assert "Build and push devel base image" in workflow
     assert "target: devel" in workflow
@@ -122,15 +116,9 @@ def test_gb10_cmake_avoids_non_sm121_placeholder_fatbins():
     trtllm_cmake = read("cpp/tensorrt_llm/CMakeLists.txt")
     cutlass_cmake = read("cpp/tensorrt_llm/kernels/cutlass_kernels/CMakeLists.txt")
     flash_mla_cmake = read("cpp/tensorrt_llm/kernels/flashMLA/CMakeLists.txt")
-    trtllm_gen_fmha_cmake = read(
-        "cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/CMakeLists.txt"
-    )
-    trtllm_gen_fmha_runner = read(
-        "cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/fmhaRunner.cpp"
-    )
-    trtllm_gen_fmha_runner_h = read(
-        "cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/fmhaRunner.h"
-    )
+    trtllm_gen_fmha_cmake = read("cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/CMakeLists.txt")
+    trtllm_gen_fmha_runner = read("cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/fmhaRunner.cpp")
+    trtllm_gen_fmha_runner_h = read("cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/fmhaRunner.h")
     plugin_cmake = read("cpp/tensorrt_llm/plugins/CMakeLists.txt")
     thop_cmake = read("cpp/tensorrt_llm/thop/CMakeLists.txt")
     low_latency_gemm_plugin = read(
@@ -138,8 +126,7 @@ def test_gb10_cmake_avoids_non_sm121_placeholder_fatbins():
     )
     attention_op_h = read("cpp/tensorrt_llm/common/attentionOp.h")
     moe_dispatch = read(
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/"
-        "moe_gemm_template_dispatch.h"
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/moe_gemm_template_dispatch.h"
     )
 
     assert 'PROPERTY CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"' in cuda_config
@@ -149,15 +136,26 @@ def test_gb10_cmake_avoids_non_sm121_placeholder_fatbins():
     assert "target_link_libraries(${SHARED_TARGET} PUBLIC ${TRTLLM_LINK_LIBS})" in trtllm_cmake
     assert "set(TRTLLM_PRIVATE_LINK_LIBS" in trtllm_cmake
     assert "set(TRTLLM_PRIVATE_LINK_LIBS ${TRTLLM_PRIVATE_LINK_LIBS} moe_gemm_src)" in trtllm_cmake
-    assert "target_link_libraries(${SHARED_TARGET} PRIVATE ${TRTLLM_PRIVATE_LINK_LIBS})" in trtllm_cmake
-    assert "target_link_libraries(${PLUGIN_SHARED_TARGET} moe_gemm_src kernels_src cutlass_src)" in plugin_cmake
-    assert "target_link_libraries(th_common PRIVATE moe_gemm_src kernels_src cutlass_src)" in thop_cmake
+    assert (
+        "target_link_libraries(${SHARED_TARGET} PRIVATE ${TRTLLM_PRIVATE_LINK_LIBS})"
+        in trtllm_cmake
+    )
+    assert (
+        "target_link_libraries(${PLUGIN_SHARED_TARGET} moe_gemm_src kernels_src cutlass_src)"
+        in plugin_cmake
+    )
+    assert (
+        "target_link_libraries(th_common PRIVATE moe_gemm_src kernels_src cutlass_src)"
+        in thop_cmake
+    )
     assert 'glob_src_create_target(120 "120f;121")' in cutlass_cmake
     assert "set_cuda_architectures(fb_gemm_src 89 90 100f 120f 121)" in cutlass_cmake
     assert "set_cuda_architectures(fp8_blockscale_gemm_src 89 90 100f 120f 121)" in cutlass_cmake
     assert "set_cuda_architectures(fp4_gemm_src 100f 120f 121)" in cutlass_cmake
     assert "$<TARGET_OBJECTS:_moe_gemm_launcher>" in cutlass_cmake
-    assert "tensorrt_llm/kernels/cutlass_kernels/include/low_latency_gemm.h" in low_latency_gemm_plugin
+    assert (
+        "tensorrt_llm/kernels/cutlass_kernels/include/low_latency_gemm.h" in low_latency_gemm_plugin
+    )
     assert "namespace low_latency_gemm = tensorrt_llm::kernels::" in low_latency_gemm_plugin
     assert "flash_mla_stub.cpp" in flash_mla_cmake
     assert '"90" IN_LIST CMAKE_CUDA_ARCHITECTURES_ORIG' in flash_mla_cmake
@@ -174,17 +172,54 @@ def test_gb10_cmake_avoids_non_sm121_placeholder_fatbins():
     assert "Fused MoE SM80 launcher is not built for this architecture set" in moe_dispatch
 
 
-def test_gb10_cutlass_generator_drops_disabled_arch_families():
-    generator = read(
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/python/generate_kernels.py"
+def test_trtllm_gen_fmha_sm121_is_not_enabled_without_real_export_bundle():
+    fmha_dir = ROOT / "cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha"
+    cmake = read("cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/CMakeLists.txt")
+    runner = read("cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/fmhaRunner.cpp")
+    kernels = read("cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/fmhaKernels.h")
+    cuda_arch_decl = read(
+        "cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/"
+        "trtllmGen_fmha_export/trtllm/gen/CudaArchDecl.h"
     )
+    kernel_meta = read("cpp/tensorrt_llm/kernels/trtllmGenKernels/fmha/cubin/kernelMetaInfo.h")
+
+    sm12_cubins = list((fmha_dir / "cubin").glob("FmhaSm12*.cubin.tar.zst"))
+    sm121_cubins = list((fmha_dir / "cubin").glob("FmhaSm121*.cubin.tar.zst"))
+
+    # Rewrite this test when a real SM121 TRTLLM Gen FMHA export bundle lands.
+    assert not sm12_cubins
+    assert not sm121_cubins
+    assert "Sm121" not in cuda_arch_decl
+    assert "121a" not in cuda_arch_decl
+    assert "case 121:" not in kernels
+    assert "kSM_121" not in kernel_meta
+    assert "filter_source_cuda_architectures(SOURCE_LIST SRC_CPP ARCHS 100 103 100f)" in cmake
+    assert 'trtllm_gen_fmha "${CMAKE_CURRENT_SOURCE_DIR}/cubin" ARCHS 100 103 100f' in cmake
+    assert "mSM == kSM_100 || mSM == kSM_103" in runner
+
+
+def test_gb10_nvfp4_moe_cuda_graph_smoke_is_bound_to_sm121_and_cutlass():
+    smoke = read("tests/gb10/trtllm_fp4_moe_cuda_graph_smoke.py")
+
+    assert "require_sm121()" in smoke
+    assert "CutlassFusedMoE.can_implement(QuantAlgo.NVFP4" in smoke
+    assert "use_cuda_graph=True" in smoke
+    assert "torch.cuda.CUDAGraph()" in smoke
+    assert "ENABLE_CONFIGURABLE_MOE" in smoke
+    assert "fp4_moe_cuda_graph_smoke_ok" in smoke
+
+
+def test_gb10_cutlass_generator_drops_disabled_arch_families():
+    generator = read("cpp/tensorrt_llm/kernels/cutlass_kernels/python/generate_kernels.py")
     sm90_body = generator[
-        generator.index("def generate_sm90_operations"):
-        generator.index("\ndef calc_shape_mnk_sm100")
+        generator.index("def generate_sm90_operations") : generator.index(
+            "\ndef calc_shape_mnk_sm100"
+        )
     ]
     sm80_body = generator[
-        generator.index("def generate_sm80_operations"):
-        generator.index('\n\nif __name__ == "__main__"')
+        generator.index("def generate_sm80_operations") : generator.index(
+            '\n\nif __name__ == "__main__"'
+        )
     ]
 
     assert "if not is_arch_enabled:\n        return []" in sm90_body
@@ -192,12 +227,8 @@ def test_gb10_cutlass_generator_drops_disabled_arch_families():
 
 
 def test_upstream_bot_schedules_are_manual_only_for_the_fork():
-    assert "schedule:" not in workflow_header(
-        ".github/workflows/auto-close-inactive-issues.yml"
-    )
-    assert "schedule:" not in workflow_header(
-        ".github/workflows/label_community_pr.yml"
-    )
+    assert "schedule:" not in workflow_header(".github/workflows/auto-close-inactive-issues.yml")
+    assert "schedule:" not in workflow_header(".github/workflows/label_community_pr.yml")
 
 
 def test_gb10_nvfp4_moe_loader_avoids_typed_storage_data_ptr():
@@ -209,9 +240,7 @@ def test_gb10_nvfp4_moe_loader_avoids_typed_storage_data_ptr():
 
 
 def test_gb10_fp8_prequant_and_nvfp4_linear_allow_sm121_cuda_core():
-    quantization_ops = read(
-        "tensorrt_llm/_torch/auto_deploy/custom_ops/quantization/quant.py"
-    )
+    quantization_ops = read("tensorrt_llm/_torch/auto_deploy/custom_ops/quantization/quant.py")
     linear = read("tensorrt_llm/_torch/modules/linear.py")
 
     assert "capability in ((8, 9), (12, 0), (12, 1))" in quantization_ops
@@ -221,8 +250,7 @@ def test_gb10_fp8_prequant_and_nvfp4_linear_allow_sm121_cuda_core():
 def test_gb10_cutlass_moe_filters_sm121_shared_memory_configs():
     heuristic = read("cpp/tensorrt_llm/kernels/cutlass_kernels/cutlass_heuristic.cpp")
     launcher = read(
-        "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/launchers/"
-        "moe_gemm_tma_ws_launcher.inl"
+        "cpp/tensorrt_llm/kernels/cutlass_kernels/moe_gemm/launchers/moe_gemm_tma_ws_launcher.inl"
     )
 
     assert "kMinSmemForFullTileSet = 120 * 1024" in heuristic
