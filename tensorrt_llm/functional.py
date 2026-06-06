@@ -33,6 +33,7 @@ from ._utils import (QuantModeWrapper, bf16_array, bool_array,
                      fp16_array, fp32_array, get_sm_version, int32_array,
                      int64_array, np_dtype_to_trt, str_dtype_to_trt,
                      trt_dtype_to_np, trt_dtype_to_str)
+from .logger import logger
 from .network import PluginInfo, get_np_weight, set_np_weight, set_plugin_info
 from .plugin import TRT_LLM_PLUGIN_NAMESPACE, current_all_reduce_helper
 from .quantization import QuantMode
@@ -4139,9 +4140,24 @@ def allreduce(
     workspace = None
     if all_reduce_params.strategy != AllReduceStrategy.NCCL and all_reduce_params.strategy != AllReduceStrategy.UB:
         if current_all_reduce_helper().workspace is None:
-            all_reduce_params.strategy = AllReduceStrategy.NCCL_SYMMETRIC
+            if torch.cuda.is_available() and get_sm_version() == 121:
+                logger.warning_once(
+                    "NCCL_SYMMETRIC is unsupported on GB10 (SM121); falling back to plain NCCL.",
+                    key="functional_allreduce_nccl_symmetric_gb10_fallback",
+                )
+                all_reduce_params.strategy = AllReduceStrategy.NCCL
+            else:
+                all_reduce_params.strategy = AllReduceStrategy.NCCL_SYMMETRIC
         else:
             workspace = current_all_reduce_helper().workspace.trt_tensor
+    if (torch.cuda.is_available() and get_sm_version() == 121
+            and all_reduce_params.strategy == AllReduceStrategy.NCCL_SYMMETRIC):
+        logger.warning_once(
+            "NCCL_SYMMETRIC is unsupported on GB10 (SM121); falling back to plain NCCL.",
+            key="functional_allreduce_nccl_symmetric_gb10_fallback",
+        )
+        all_reduce_params.strategy = AllReduceStrategy.NCCL
+        workspace = None
     if all_reduce_params.strategy == AllReduceStrategy.UB:
         tensor.mark_output("allreduce_ub_0_" + str(allreduce_ub_counter))
     dtype = default_net().plugin_config.nccl_plugin

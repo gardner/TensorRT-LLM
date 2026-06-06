@@ -274,3 +274,15 @@ def test_gb10_allreduce_avoids_nccl_symmetric_tactics():
     assert '"GB10" in torch.cuda.get_device_name()' in custom_ops
     assert "valid_strategies = [AllReduceStrategy.NCCL.value]" in custom_ops
     assert "if _is_gb10() else AllReduceStrategy.NCCL_SYMMETRIC.value" in custom_ops
+
+
+def test_gb10_allreduce_normalizes_nccl_symmetric_to_nccl():
+    distributed_ops = read("tensorrt_llm/_torch/distributed/ops.py")
+    functional = read("tensorrt_llm/functional.py")
+
+    assert "def _is_gb10() -> bool:" in distributed_ops
+    assert "NCCL_SYMMETRIC is unsupported on GB10 (DGX Spark); falling back to plain NCCL." in distributed_ops
+    assert "self.strategy = AllReduceStrategy.NCCL" in distributed_ops
+
+    assert "NCCL_SYMMETRIC is unsupported on GB10 (SM121); falling back to plain NCCL." in functional
+    assert "all_reduce_params.strategy = AllReduceStrategy.NCCL" in functional

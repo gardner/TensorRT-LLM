@@ -32,6 +32,10 @@ _NCCL_SYMMETRIC_ZERO_COPY: bool = (os.environ.get(
 _thread_local = threading.local()
 
 
+def _is_gb10() -> bool:
+    return torch.cuda.is_available() and torch.cuda.get_device_capability() == (12, 1)
+
+
 def get_allreduce_workspace(mapping: Mapping) -> torch.LongTensor:
     if not hasattr(_thread_local, f'allreduce_workspaces_{mapping.pp_rank}'):
         setattr(_thread_local, f'allreduce_workspaces_{mapping.pp_rank}', {})
@@ -699,6 +703,13 @@ class AllReduce(nn.Module):
         self.mnnvl_allreduce = None
         self.symm_mem_allreduce = None
         self._disable_mpi = mpi_disabled()
+
+        if self.strategy == AllReduceStrategy.NCCL_SYMMETRIC and _is_gb10():
+            logger.warning_once(
+                "NCCL_SYMMETRIC is unsupported on GB10 (DGX Spark); falling back to plain NCCL.",
+                key="allreduce_nccl_symmetric_gb10_fallback",
+            )
+            self.strategy = AllReduceStrategy.NCCL
 
         self.all_reduce_op = torch.ops.trtllm.allreduce_pg if self._disable_mpi else torch.ops.trtllm.allreduce
 
