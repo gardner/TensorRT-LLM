@@ -201,6 +201,12 @@ def test_trtllm_gen_fmha_sm121_is_not_enabled_without_real_export_bundle():
 def test_gb10_nvfp4_moe_cuda_graph_smoke_is_bound_to_sm121_and_cutlass():
     smoke = read("tests/gb10/trtllm_fp4_moe_cuda_graph_smoke.py")
 
+    assert "SMOKE_CASES" in smoke
+    assert "(8, 4, 1, 512, 512)" in smoke
+    assert "(16, 4, 2, 512, 512)" in smoke
+    assert "(32, 8, 4, 512, 512)" in smoke
+    assert "run_cuda_graph_smoke_case" in smoke
+    assert "run_cuda_graph_smoke_cases" in smoke
     assert "require_sm121()" in smoke
     assert "CutlassFusedMoE.can_implement(QuantAlgo.NVFP4" in smoke
     assert "use_cuda_graph=True" in smoke

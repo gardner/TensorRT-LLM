@@ -12,6 +12,13 @@ from tensorrt_llm._torch.modules.fused_moe.routing import DefaultMoeRoutingMetho
 from tensorrt_llm.mapping import Mapping
 from tensorrt_llm.models.modeling_utils import QuantAlgo, QuantConfig
 
+SMOKE_CASES: tuple[tuple[int, int, int, int, int], ...] = (
+    # (num_tokens, num_experts, top_k, hidden_size, intermediate_size)
+    (8, 4, 1, 512, 512),
+    (16, 4, 2, 512, 512),
+    (32, 8, 4, 512, 512),
+)
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -144,7 +151,7 @@ def assert_close(name: str, actual: torch.Tensor, expected: torch.Tensor) -> Non
     require(max_diff <= 1e-2, f"{name}: max diff {max_diff} exceeds tolerance")
 
 
-def run_cuda_graph_smoke(
+def run_cuda_graph_smoke_case(
     *,
     num_tokens: int,
     num_experts: int,
@@ -153,7 +160,9 @@ def run_cuda_graph_smoke(
     intermediate_size: int,
     dtype: torch.dtype,
 ) -> None:
+    case_id = f"tokens={num_tokens},experts={num_experts},top_k={top_k}"
     ok, reason = CutlassFusedMoE.can_implement(QuantAlgo.NVFP4, dtype_activation=dtype)
+    print("fp4_moe_graph_case", case_id)
     print("fp4_moe_graph_cutlass_nvfp4_supported", ok)
     print("fp4_moe_graph_cutlass_nvfp4_reason", reason)
     require(ok, f"Cutlass NVFP4 MoE is not supported: {reason}")
@@ -214,7 +223,29 @@ def run_cuda_graph_smoke(
         replay_next = graph_out.clone()
         assert_close("fp4_moe_graph_updated_input_replay", replay_next, expected)
 
-    print("fp4_moe_graph_output_shape", tuple(replay_next.shape), replay_next.dtype)
+    print(
+        "fp4_moe_graph_output_shape",
+        tuple(replay_next.shape),
+        replay_next.dtype,
+    )
+    print("fp4_moe_graph_case_ok", case_id)
+
+
+def run_cuda_graph_smoke_cases(
+    cases: tuple[tuple[int, int, int, int, int], ...],
+    *,
+    dtype: torch.dtype,
+) -> None:
+    for num_tokens, num_experts, top_k, hidden_size, intermediate_size in cases:
+        run_cuda_graph_smoke_case(
+            num_tokens=num_tokens,
+            num_experts=num_experts,
+            top_k=top_k,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            dtype=dtype,
+        )
+
     print("fp4_moe_cuda_graph_smoke_ok")
 
 
@@ -229,14 +260,31 @@ def main() -> None:
 
     os.environ.setdefault("ENABLE_CONFIGURABLE_MOE", "0")
     require_sm121()
-    run_cuda_graph_smoke(
-        num_tokens=args.num_tokens,
-        num_experts=args.num_experts,
-        top_k=args.top_k,
-        hidden_size=args.hidden_size,
-        intermediate_size=args.intermediate_size,
-        dtype=torch.bfloat16,
-    )
+    if (
+        args.num_tokens,
+        args.num_experts,
+        args.top_k,
+        args.hidden_size,
+        args.intermediate_size,
+    ) != (
+        16,
+        4,
+        2,
+        512,
+        512,
+    ):
+        run_cuda_graph_smoke_case(
+            num_tokens=args.num_tokens,
+            num_experts=args.num_experts,
+            top_k=args.top_k,
+            hidden_size=args.hidden_size,
+            intermediate_size=args.intermediate_size,
+            dtype=torch.bfloat16,
+        )
+        print("fp4_moe_cuda_graph_smoke_ok")
+        return
+
+    run_cuda_graph_smoke_cases(SMOKE_CASES, dtype=torch.bfloat16)
 
 
 if __name__ == "__main__":
